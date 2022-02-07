@@ -29,36 +29,40 @@ public class HtmlProcessor
 
         static bool HasAttributeWithValue(IElement el, string attribute) => el.HasAttribute(attribute) && !string.IsNullOrWhiteSpace(el.GetAttribute(attribute));
         static Uri BuildUri(string? path, Uri source)
-            => path switch{
-                null => source,
+        {
+            var urlString = path switch{
+                null => source.AbsoluteUri,
                 //ex http://foo.bar/buzz
-                string s when s.StartsWith("http") => new Uri(path),
+                string s when s.StartsWith("http") => path,
                 // ex: ./foo/bar, /foo/bar
-                string s when s.StartsWith('/')  => new Uri(Path.Join(source.GetLeftPart(UriPartial.Authority), path)),
+                string s when s.StartsWith('/')  => Path.Join(source.GetLeftPart(UriPartial.Authority), path),
                 // ex. foo/bar, ./foo/bar, foo.html
                 _ => Path.GetExtension(source.AbsoluteUri) != null
-                    ? new Uri(Path.Join(source.AbsoluteUri.Replace(Path.GetFileName(source.AbsoluteUri), ""), path))
-                    : new Uri(Path.Join(source.AbsoluteUri, path)),
+                    ? Path.Join(source.AbsoluteUri.Replace(Path.GetFileName(source.AbsoluteUri), ""), path)
+                    : Path.Join(source.AbsoluteUri, path)
             };
+
+            return Uri.TryCreate(urlString, UriKind.Absolute, out var result) ? new Uri(result.GetLeftPart(UriPartial.Path)) : source;
+        }
 
         var urls = document.QuerySelectorAll("a, link")
             .Where(x => HasAttributeWithValue(x, "href"))
             .Select(x => x.GetAttribute("href"))
-            .Where(x => !x.StartsWith("#"))
-            .Select(x => BuildUri(x, content.Source))
+            .Where(x => !x.StartsWith("#") && !x.StartsWith("javascript:") && !x.StartsWith("mailto:") && !x.StartsWith("tel:"))
+            .Select(x => BuildUri(x, content.Url))
             .ToList();
 
         var imgScriptUrls = document.QuerySelectorAll("img, script")
             .Where(x => HasAttributeWithValue(x, "src"))
             .Select(x => x.GetAttribute("src"))
             .Where(x => !x.StartsWith("data:"))
-            .Select(x => BuildUri(x, content.Source))
+            .Select(x => BuildUri(x, content.Url))
             .ToList();
 
         urls.AddRange(imgScriptUrls);
 
         urls.Where(x => x.GetLeftPart(UriPartial.Authority).Equals(host) && _extractedUrls.TryAdd(x, x)).ToList().ForEach(x => {
-            _queue.Add(new WebContent(x, content.Url));
+            _queue.Add(new WebContent(x));
         });
 
         return content;

@@ -1,6 +1,6 @@
 namespace Zlorp.Console;
 
-public record WebContent(Uri Url, Uri Source)
+public record WebContent(Uri Url)
 {
     public HttpResponseMessage? Response { get; init; }
 
